@@ -1,4 +1,5 @@
-name: CI - SAST & DAST
+name: CI-SAST & DAST
+
 on:
   push:
     branches: [ main ]
@@ -6,28 +7,42 @@ on:
 jobs:
   security-test:
     runs-on: ubuntu-latest
-
+    
     steps:
+      # --- Langkah 1: Checkout Kode dari Repository ---
       - name: Checkout
         uses: actions/checkout@v3
-
-      # --- SAST: SonarQube Scan ---
-      - name: Run SonarQube Scanner
-        uses: sonarsource/sonarqube-scan-action@v2
         with:
-          projectBaseDir: .
-          args: >
-            -Dsonar.projectKey=devsecops-demo
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
-
-      # --- DAST: OWASP ZAP Scan ---
+          fetch-depth: 0  # Diperlukan agar SonarScanner bisa melacak riwayat commit
+          
+      # --- Langkah 2: Menjalankan Aplikasi PHP ---
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'  # Sesuaikan dengan versi PHP yang digunakan proyek Anda
+          
+      - name: Start PHP Server
+        run: php -S localhost:8080 -t . &
+        # Menjalankan server PHP bawaan di port 8080 agar bisa di-scan oleh ZAP
+        
+      # --- Langkah 3: Analisis SAST menggunakan SonarCloud ---
+      - name: Run SonarCloud Scanner
+        uses: sonarsource/sonarqube-scan-action@v2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        # Menggunakan konfigurasi SonarCloud untuk analisis kode statis (SAST)
+          
+      # --- Langkah 4: Analisis DAST menggunakan OWASP ZAP ---
       - name: Run OWASP ZAP Baseline Scan
         run: |
-          docker run -v $(pwd):/zap/wrk/:rw --network="host" \
-          owasp/zap2docker-stable zap-baseline.py \
-          -t http://localhost:8080 -r zap_report.html || true
+          docker run -v $(pwd):/zap/wrk/:rw \
+            ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t http://localhost:8080 -r zap_report.html || true
+        # Memindai aplikasi yang berjalan di localhost:8080
+        # '|| true' mencegah pipeline gagal jika ditemukan celah keamanan
 
+      # --- Langkah 5: Upload Hasil Pemindaian DAST ---
       - name: Upload ZAP Report
         uses: actions/upload-artifact@v4
         with:
