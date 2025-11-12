@@ -1,6 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: "npm"
-    directory: "/"
+    # Kita beri tahu lokasi yang TEPAT dari package.json
+    directory: "/assets/vendor/fontawesome-free" 
     schedule:
       interval: "daily"
